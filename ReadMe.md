@@ -1,12 +1,20 @@
+# Frontend Team Setup Instructions
 
+Please follow the steps below to set up the project properly.
+
+---
+
+## 1️⃣ Clone the Repository
+
+Run the following command:
+
+```bash
 git clone <repo-url>
 cd backend
 npm install
-
 cd ../core-engine
 g++ main.cpp -o engine.exe
-
-# Copy engine.exe to backend folder
-
+After running this command, an engine.exe file will be created in the same folder.
+Copy the generated engine.exe file and paste it inside the backend folder.
 cd ../backend
 node server.js
