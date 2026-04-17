@@ -4,9 +4,9 @@ Please follow the steps below to set up the project properly.
 
 ---
 
-## 1️⃣ Clone the Repository
+## 1- Clone the Repository
 
-Run the following command:
+## 2- Run the following commands:
 
 ```bash
 git clone <repo-url>
