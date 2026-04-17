@@ -3,6 +3,8 @@
 #include "models/mm1.cpp"
 #include "models/mm2.cpp"
 #include "models/mg1.cpp"
+#include "models/mg2.cpp"
+
 #include <iomanip>
 
 using namespace std;
@@ -23,6 +25,13 @@ int main(int argc, char* argv[]) {
         if (argc < 5) return 1;
         double var = stod(argv[4]);
         calculateMG1(lambda, mu, var);
+    } else if (model == "mg2") {
+        if (argc < 5) return 1;
+        double var = stod(argv[4]);
+        calculateMG2(lambda, mu, var);
+    } else {
+        cerr << "Unknown model: " << model;
+        return 1;
     }
     return 0;
 }

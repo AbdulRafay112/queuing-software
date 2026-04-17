@@ -7,55 +7,6 @@ const MODELS = {
   "M/G/2": { servers: 2, general: true },
 };
 
-function factorial(n) {
-  if (n <= 1) return 1;
-  return n * factorial(n - 1);
-}
-
-function erlangC(lambda, mu, c) {
-  const rho = lambda / mu;
-  const a = rho / c;
-  if (a >= 1) return null;
-  let sum = 0;
-  for (let k = 0; k < c; k++) sum += Math.pow(rho, k) / factorial(k);
-  const last = Math.pow(rho, c) / (factorial(c) * (1 - a));
-  const P0 = 1 / (sum + last);
-  const Cq = (Math.pow(rho, c) * a) / (factorial(c) * Math.pow(1 - a, 2)) * P0;
-  return { P0, Cq, a };
-}
-
-function calcMM(lambda, mu, c) {
-  const result = erlangC(lambda, mu, c);
-  if (!result) return null;
-  const { P0, Cq } = result;
-  const Lq = Cq;
-  const Wq = Lq / lambda;
-  const W  = Wq + 1 / mu;
-  const L  = lambda * W;
-  const rho = lambda / (c * mu);
-  return { Lq, Wq, W, L, rho, P0 };
-}
-
-function calcMG(lambda, mu, sigma, c) {
-  const rho = lambda / (c * mu);
-  if (rho >= 1) return null;
-  if (c === 1) {
-    const Lq = (Math.pow(lambda, 2) * (1 / Math.pow(mu, 2) + Math.pow(sigma, 2))) / (2 * (1 - rho));
-    const Wq = Lq / lambda;
-    const W  = Wq + 1 / mu;
-    const L  = lambda * W;
-    return { Lq, Wq, W, L, rho };
-  }
-  // M/G/c approximation (Kimura)
-  const mmResult = calcMM(lambda, mu, c);
-  if (!mmResult) return null;
-  const cv2 = Math.pow(sigma * mu, 2);
-  const Lq = mmResult.Lq * (1 + cv2) / 2;
-  const Wq = Lq / lambda;
-  const W  = Wq + 1 / mu;
-  const L  = lambda * W;
-  return { Lq, Wq, W, L, rho };
-}
 
 function validate(fields, model, inputMode) {
   const errs = {};
@@ -86,6 +37,35 @@ function validate(fields, model, inputMode) {
     errs.stability = `System unstable: λ must be < ${c} × μ (= ${(c * mu).toFixed(4)}).`;
 
   return errs;
+}
+
+
+async function calculateModels(model, lambda, mu, variance) {
+  try {
+    const res = await fetch(
+      `http://localhost:5000/api/calculate?model=${model}&lambda=${lambda}&mu=${mu}&variance=${variance || 0}`
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "API Error");
+    }
+
+    const safe = (v) => (v === undefined || v === null || v === "" ? null : parseFloat(v));
+
+return {
+  rho: safe(data.trafficIntensity),
+  L: safe(data.avgCustomersSystem),
+  Lq: safe(data.avgCustomersQueue),
+  W: safe(data.waitTimeSystem),
+  Wq: safe(data.waitTimeQueue),
+  P0: safe(data.probZeroCustomers),
+};
+  } catch (err) {
+    console.error("API ERROR:", err);
+    return null;
+  }
 }
 
 const fmt = (n, d = 4) => (isNaN(n) || n == null ? "—" : Number(n).toFixed(d));
@@ -150,7 +130,7 @@ export default function QueueCalculator() {
     setTouched((t) => ({ ...t, [k]: true }));
   };
 
-  const handleCalculate = () => {
+  const handleCalculate = async () => {
     setTouched({ lambda: true, mu: true, sigma: true, meanIAT: true, meanST: true });
     const errs = validate(fields, model, inputMode);
     setErrors(errs);
@@ -159,18 +139,25 @@ export default function QueueCalculator() {
     const toNum = (v) => parseFloat(v);
     const lambda = inputMode === "rate" ? toNum(fields.lambda) : 1 / toNum(fields.meanIAT);
     const mu     = inputMode === "rate" ? toNum(fields.mu)     : 1 / toNum(fields.meanST);
-    const c      = servers;
+    // const c      = servers;
 
     let res;
-    if (isGeneral) {
-      const sigma = toNum(fields.sigma);
-      res = calcMG(lambda, mu, sigma, c);
-    } else {
-      res = calcMM(lambda, mu, c);
-    }
-    setResult(res ? { ...res, lambda, mu, c } : null);
-    if (!res) setErrors({ stability: "System unstable or invalid parameters." });
-  };
+    const variance = isGeneral ? Math.pow(toNum(fields.sigma), 2) : 0;
+
+    // map model names for backend
+    const formattedModel = model.toLowerCase().replace(/\//g, '');
+    // M/M/1 → mm1, M/G/1 → mg1
+
+    res = await calculateModels(formattedModel, lambda, mu, variance);
+
+    if (!res) {
+    setErrors({ stability: "System unstable or invalid parameters." });
+    setResult(null);
+    return;
+  }
+
+  setResult({ ...res, lambda, mu });
+  }
 
   const handleModelChange = (m) => {
     setModel(m);
@@ -301,7 +288,7 @@ export default function QueueCalculator() {
         {/* Sigma — M/G models only */}
         {isGeneral && (
           <div>
-            <label style={labelCls}>Std deviation of service time σ</label>
+            <label style={labelCls}>Variance of service time σ</label>
             <input
               type="number"
               min="0"
