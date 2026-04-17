@@ -1,0 +1,4 @@
+node_modules/
+backend/engine.exe
+backend/package-lock.json
+.env
